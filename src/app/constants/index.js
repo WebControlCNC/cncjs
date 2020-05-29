@@ -68,6 +68,7 @@ export const GRBL = 'Grbl';
 export const MARLIN = 'Marlin';
 export const SMOOTHIE = 'Smoothie';
 export const TINYG = 'TinyG';
+export const MASLOW = 'Maslow';
 
 // Workflow State
 export const WORKFLOW_STATE_IDLE = 'idle';
@@ -109,3 +110,13 @@ export const TINYG_MACHINE_STATE_JOG = 10; // Machine is in a jogging cycle
 export const TINYG_MACHINE_STATE_INTERLOCK = 11; // Machine is in safety interlock hold
 export const TINYG_MACHINE_STATE_SHUTDOWN = 12; // Machine is in shutdown state. Will not process commands
 export const TINYG_MACHINE_STATE_PANIC = 13; // Machine is in panic state. Needs to be physically reset
+
+// Maslow Active State
+export const MASLOW_ACTIVE_STATE_IDLE = 'Idle';
+export const MASLOW_ACTIVE_STATE_RUN = 'Run';
+export const MASLOW_ACTIVE_STATE_HOLD = 'Hold';
+export const MASLOW_ACTIVE_STATE_DOOR = 'Door';
+export const MASLOW_ACTIVE_STATE_HOME = 'Home';
+export const MASLOW_ACTIVE_STATE_SLEEP = 'Sleep';
+export const MASLOW_ACTIVE_STATE_ALARM = 'Alarm';
+export const MASLOW_ACTIVE_STATE_CHECK = 'Check';

@@ -42,6 +42,10 @@ import {
     TINYG_MACHINE_STATE_STOP,
     TINYG_MACHINE_STATE_END,
     TINYG_MACHINE_STATE_RUN,
+    // Maslow
+    MASLOW,
+    MASLOW_ACTIVE_STATE_IDLE,
+    MASLOW_ACTIVE_STATE_RUN,
     // Workflow
     WORKFLOW_STATE_RUNNING
 } from '../../constants';
@@ -584,6 +588,41 @@ class AxesWidget extends PureComponent {
                     })
                 }));
             }
+
+            // Maslow
+            if (type === MASLOW) {
+                const { status, parserstate } = { ...controllerState };
+                const { mpos, wpos } = status;
+                const { modal = {} } = { ...parserstate };
+                const units = {
+                    'G20': IMPERIAL_UNITS,
+                    'G21': METRIC_UNITS
+                }[modal.units] || this.state.units;
+                const $13 = Number(get(controller.settings, 'settings.$13', 0)) || 0;
+
+                this.setState(state => ({
+                    units: units,
+                    controller: {
+                        ...state.controller,
+                        type: type,
+                        state: controllerState
+                    },
+                    // Machine position are reported in mm ($13=0) or inches ($13=1)
+                    machinePosition: mapValues({
+                        ...state.machinePosition,
+                        ...mpos
+                    }, (val) => {
+                        return ($13 > 0) ? in2mm(val) : val;
+                    }),
+                    // Work position are reported in mm ($13=0) or inches ($13=1)
+                    workPosition: mapValues({
+                        ...state.workPosition,
+                        ...wpos
+                    }, val => {
+                        return ($13 > 0) ? in2mm(val) : val;
+                    })
+                }));
+            }
         }
     };
 
@@ -745,7 +784,7 @@ class AxesWidget extends PureComponent {
         if (workflow.state === WORKFLOW_STATE_RUNNING) {
             return false;
         }
-        if (!includes([GRBL, MARLIN, SMOOTHIE, TINYG], controllerType)) {
+        if (!includes([GRBL, MARLIN, SMOOTHIE, TINYG, MASLOW], controllerType)) {
             return false;
         }
         if (controllerType === GRBL) {
@@ -780,6 +819,16 @@ class AxesWidget extends PureComponent {
                 TINYG_MACHINE_STATE_RUN
             ];
             if (!includes(states, machineState)) {
+                return false;
+            }
+        }
+        if (controllerType === MASLOW) {
+            const activeState = get(controllerState, 'status.activeState');
+            const states = [
+                MASLOW_ACTIVE_STATE_IDLE,
+                MASLOW_ACTIVE_STATE_RUN
+            ];
+            if (!includes(states, activeState)) {
                 return false;
             }
         }
