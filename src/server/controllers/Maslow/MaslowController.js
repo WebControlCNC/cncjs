@@ -95,10 +95,6 @@ class MaslowController {
     queryTimer = null;
 
     actionMask = {
-        queryParserState: {
-            state: false, // wait for a message containing the current G-code parser modal state
-            reply: false // wait for an `ok` or `error` response
-        },
         queryStatusReport: false,
 
         // Respond to user input
@@ -107,7 +103,6 @@ class MaslowController {
     };
 
     actionTime = {
-        queryParserState: 0,
         queryStatusReport: 0,
         senderFinishTime: 0
     };
@@ -158,12 +153,15 @@ class MaslowController {
                     if (r) {
                         const name = r[1];
                         const value = Number(r[2]);
-                        if ((name === '$13') && (value >= 0) && (value <= 65535)) {
+                        if ((name === '$13')) {
+                            logger.debug(`$13 setting: ${name}: ${value}`);
+                            // Make an exception for $13, everything in CNC.js parses it as inch vs mm, but it's something else in Maslow.
                             const nextSettings = {
                                 ...this.runner.settings,
                                 settings: {
                                     ...this.runner.settings.settings,
-                                    [name]: value ? '1' : '0'
+                                    '$13': '0',
+                                    '$13-maslow': value
                                 }
                             };
                             this.runner.settings = nextSettings; // enforce change
@@ -196,7 +194,7 @@ class MaslowController {
                     // %wait
                     if (line === WAIT) {
                         log.debug('Wait for the planner to empty');
-                        return 'G4 P0.5'; // dwell
+                        return 'G4 P5'; // dwell
                     }
 
                     // Expression
@@ -282,7 +280,7 @@ class MaslowController {
                     if (line === WAIT) {
                         log.debug(`Wait for the planner to empty: line=${sent + 1}, sent=${sent}, received=${received}`);
                         this.sender.hold({ data: WAIT }); // Hold reason
-                        return 'G4 P0.5'; // dwell
+                        return 'G4 P5'; // dwell
                     }
 
                     // Expression
@@ -422,15 +420,6 @@ class MaslowController {
         });
 
         this.runner.on('ok', (res) => {
-            if (this.actionMask.queryParserState.reply) {
-                if (this.actionMask.replyParserState) {
-                    this.actionMask.replyParserState = false;
-                    this.emit('serialport:read', res.raw);
-                }
-                this.actionMask.queryParserState.reply = false;
-                return;
-            }
-
             const { hold, sent, received } = this.sender.state;
 
             if (this.workflow.state === WORKFLOW_STATE_RUNNING) {
@@ -520,9 +509,6 @@ class MaslowController {
         });
 
         this.runner.on('parserstate', (res) => {
-            this.actionMask.queryParserState.state = false;
-            this.actionMask.queryParserState.reply = true;
-
             if (this.actionMask.replyParserState) {
                 this.emit('serialport:read', res.raw);
             }
@@ -549,6 +535,7 @@ class MaslowController {
         });
 
         this.runner.on('startup', (res) => {
+            log.silly('startup');
             this.emit('serialport:read', res.raw);
 
             // The startup message always prints upon startup, after a reset, or at program end.
@@ -602,44 +589,6 @@ class MaslowController {
             }
         };
 
-        const queryParserState = _.throttle(() => {
-            // Check the ready flag
-            if (!(this.ready)) {
-                return;
-            }
-
-            const now = new Date().getTime();
-
-            // Do not force query parser state ($G) when running a G-code program,
-            // it will consume 3 bytes from the receive buffer in each time period.
-            // @see https://github.com/cncjs/cncjs/issues/176
-            // @see https://github.com/cncjs/cncjs/issues/186
-            if ((this.workflow.state === WORKFLOW_STATE_IDLE) && this.runner.isIdle()) {
-                const lastQueryTime = this.actionTime.queryParserState;
-                if (lastQueryTime > 0) {
-                    const timespan = Math.abs(now - lastQueryTime);
-                    const toleranceTime = 10000; // 10 seconds
-
-                    // Check if it has not been updated for a long time
-                    if (timespan >= toleranceTime) {
-                        log.debug(`Continue parser state query: timespan=${timespan}ms`);
-                        this.actionMask.queryParserState.state = false;
-                        this.actionMask.queryParserState.reply = false;
-                    }
-                }
-            }
-
-            if (this.actionMask.queryParserState.state || this.actionMask.queryParserState.reply) {
-                return;
-            }
-
-            if (this.isOpen()) {
-                this.actionMask.queryParserState.state = true;
-                this.actionMask.queryParserState.reply = false;
-                this.actionTime.queryParserState = now;
-                this.connection.write('$G\n');
-            }
-        }, 500);
 
         this.queryTimer = setInterval(() => {
             if (this.isClose()) {
@@ -684,11 +633,12 @@ class MaslowController {
             // ? - Status Report
             queryStatusReport();
 
-            // $G - Parser State
-            queryParserState();
+            // $G - Parser State -- not supported by Maslow
+            // queryParserState();
 
             // Check if the machine has stopped movement after completion
             if (this.actionTime.senderFinishTime > 0) {
+                log.silly('Yes');
                 const machineIdle = zeroOffset && this.runner.isIdle();
                 const now = new Date().getTime();
                 const timespan = Math.abs(now - this.actionTime.senderFinishTime);
@@ -696,6 +646,7 @@ class MaslowController {
 
                 if (!machineIdle) {
                     // Extend the sender finish time
+                    log.silly('Machine not idle, extending finish time');
                     this.actionTime.senderFinishTime = now;
                 } else if (timespan > toleranceTime) {
                     log.silly(`Finished sending G-code: timespan=${timespan}`);
@@ -797,12 +748,9 @@ class MaslowController {
     }
 
     clearActionValues() {
-        this.actionMask.queryParserState.state = false;
-        this.actionMask.queryParserState.reply = false;
         this.actionMask.queryStatusReport = false;
         this.actionMask.replyParserState = false;
         this.actionMask.replyStatusReport = false;
-        this.actionTime.queryParserState = 0;
         this.actionTime.queryStatusReport = 0;
         this.actionTime.senderFinishTime = 0;
     }

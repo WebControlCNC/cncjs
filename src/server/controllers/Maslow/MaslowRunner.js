@@ -172,6 +172,10 @@ class MaslowRunner extends events.EventEmitter {
                     [name]: value
                 }
             };
+            if (name === '$13') {
+                nextSettings.settings.$13 = 0;
+                nextSettings.settings['$13-maslow'] = value;
+            }
             if (this.settings.settings[name] !== nextSettings.settings[name]) {
                 this.settings = nextSettings; // enforce change
             }
